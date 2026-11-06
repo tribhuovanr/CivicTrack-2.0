@@ -1,0 +1,25 @@
+{
+  "name": "civictrack-modules",
+  "private": true,
+  "workspaces": [
+    "contracts",
+    "common",
+    "text-analysis",
+    "image-match",
+    "repair-verification",
+    "geo-severity",
+    "clustering",
+    "priority-sla",
+    "officer-credibility"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "typecheck": "tsc --build --clean && tsc --build"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.4",
+    "tsx": "^4.19.1"
+  }
+}
