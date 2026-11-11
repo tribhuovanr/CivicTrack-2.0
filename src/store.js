@@ -89,37 +89,51 @@ function seed() {
     sel,
     status,
     extra = {},
-  ) => ({
-    id,
-    title,
-    description,
-    location,
-    ward,
-    photo: null,
-    citizenId: "cit1",
-    status,
-    civilianDept: sel,
-    aiDept: null,
-    aiConfidence: null,
-    finalDept: null,
-    currentDept: sel || null,
-    depts: sel ? [sel] : [],
-    office: zoneOf(ward),
-    forwards: [],
-    workerId: null,
-    remarks: "",
-    completionPhoto: null,
-    feedback: null,
-    history: [
-      H(
-        "Submitted",
-        sel
-          ? "Complaint received and sent to " + sel
-          : "Complaint received and sent for central review",
-      ),
-    ],
-    ...extra,
-  });
+  ) => {
+    const priority = extra.priority || "P3";
+    const slaHours = extra.slaHours || (priority === "P1" ? 12 : priority === "P2" ? 36 : priority === "P3" ? 72 : 168);
+    const deadline = extra.deadline || new Date(Date.now() + slaHours * 3600000).toISOString();
+    return {
+      id,
+      title,
+      description,
+      location,
+      ward,
+      photo: null,
+      citizenId: "cit1",
+      status,
+      civilianDept: sel,
+      aiDept: extra.aiDept || sel,
+      aiConfidence: extra.aiConfidence ?? 0.95,
+      priority,
+      priorityScore: extra.priorityScore || (priority === "P1" ? 95 : priority === "P2" ? 70 : priority === "P3" ? 45 : 20),
+      slaHours,
+      deadline,
+      lifeSafety: Boolean(extra.lifeSafety),
+      hazardLevel: extra.hazardLevel ?? 0.5,
+      hazardKeywords: extra.hazardKeywords || [],
+      subType: extra.subType || "civic_issue",
+      summary: extra.summary || title,
+      finalDept: null,
+      currentDept: sel || null,
+      depts: sel ? [sel] : [],
+      office: zoneOf(ward),
+      forwards: [],
+      workerId: null,
+      remarks: "",
+      completionPhoto: null,
+      feedback: null,
+      history: [
+        H(
+          "Submitted",
+          sel
+            ? "Complaint received and sent to " + sel
+            : "Complaint received and sent for central review",
+        ),
+      ],
+      ...extra,
+    };
+  };
   const L = (token, cid, wid, x = {}) => ({
     token,
     cid,
@@ -133,20 +147,42 @@ function seed() {
     mk(
       "CT-100001",
       "Large pothole near school",
-      "Big pothole near the school gate.",
+      "Big pothole near the school gate causing accidents.",
       "MG Road, near St. Mary School",
       "12",
       "Roads and Infrastructure",
       "Submitted",
+      {
+        priority: "P1",
+        lifeSafety: true,
+        priorityScore: 92,
+        slaHours: 12,
+        deadline: new Date(Date.now() + 8 * 3600000).toISOString(),
+        hazardLevel: 0.88,
+        hazardKeywords: ["pothole", "school gate", "accident risk"],
+        subType: "pothole",
+        summary: "Hazardous pothole in active school zone posing vehicle and pedestrian collision danger."
+      }
     ),
     mk(
       "CT-100002",
       "Overflowing drain",
-      "Drain overflowing onto the street.",
+      "Drain overflowing onto the street with dirty water.",
       "5th Cross Market",
       "7",
       "Drainage and Sanitation",
       "Submitted",
+      {
+        priority: "P2",
+        lifeSafety: false,
+        priorityScore: 72,
+        slaHours: 36,
+        deadline: new Date(Date.now() + 22 * 3600000).toISOString(),
+        hazardLevel: 0.65,
+        hazardKeywords: ["overflowing drain", "market road", "contamination"],
+        subType: "sewage_overflow",
+        summary: "Clogged storm drain flooding market street with wastewater."
+      }
     ),
     mk(
       "CT-100003",
@@ -157,6 +193,15 @@ function seed() {
       "Waste Management",
       "In Progress",
       {
+        priority: "P3",
+        lifeSafety: false,
+        priorityScore: 48,
+        slaHours: 72,
+        deadline: new Date(Date.now() + 45 * 3600000).toISOString(),
+        hazardLevel: 0.40,
+        hazardKeywords: ["garbage pile", "odor", "residential area"],
+        subType: "garbage_dump",
+        summary: "Solid waste accumulation uncollected for several days in residential colony.",
         workerId: "w11",
         finalDept: "Waste Management",
         history: [
@@ -176,6 +221,15 @@ function seed() {
       "Street Lighting",
       "Awaiting Officer Verification",
       {
+        priority: "P4",
+        lifeSafety: false,
+        priorityScore: 25,
+        slaHours: 168,
+        deadline: new Date(Date.now() + 110 * 3600000).toISOString(),
+        hazardLevel: 0.20,
+        hazardKeywords: ["dark street", "fused bulb"],
+        subType: "broken_streetlight",
+        summary: "Non-operational streetlight creating low visibility at night.",
         workerId: "w41",
         finalDept: "Street Lighting",
         remarks: "Bulb and fuse replaced.",
@@ -233,7 +287,18 @@ import { apiRequest } from "./api";
 
 export const me = () => {
     try {
-        return JSON.parse(localStorage.getItem(S) || "null");
+        const val = localStorage.getItem(S);
+        if (!val) return null;
+        let u = null;
+        try {
+            u = JSON.parse(val);
+        } catch {
+            u = null;
+        }
+        if (typeof u === "string") {
+            u = db.users.find((user) => user.id === u && user.active !== false) || null;
+        }
+        return u;
     } catch {
         return null;
     }
@@ -260,8 +325,18 @@ export async function login(email, password, role) {
         return data.user;
 
     } catch (error) {
-        console.error("Login failed:", error.message);
-        return null;
+        console.warn("Backend unavailable, using local demo database:", error.message);
+        const u = db.users.find(
+            (u) =>
+                u.email.toLowerCase() === email.toLowerCase() &&
+                u.password === password &&
+                u.role === role &&
+                u.active !== false,
+        );
+        if (!u) return null;
+        localStorage.setItem(S, JSON.stringify(u));
+        commit();
+        return u;
     }
 }
 
@@ -285,7 +360,14 @@ export async function register(f) {
         return null;
 
     } catch (error) {
-        return error.message;
+        console.warn("Backend unavailable, using local demo registration:", error.message);
+        if (db.users.some((u) => u.email.toLowerCase() === f.email.toLowerCase()))
+            return "Email already registered";
+        const u = { id: "c" + uid(), role: "citizen", ...f };
+        db.users.push(u);
+        localStorage.setItem(S, JSON.stringify(u));
+        commit();
+        return null;
     }
 }
 /*
@@ -359,39 +441,90 @@ const alertOfficers = (c, t) =>
     )
     .forEach((o) => note(o.id, t));
   export async function addComplaint(f, citizenId) {
+    try {
+      const response = await apiRequest("/complaints", {
+        method: "POST",
+        body: JSON.stringify({
+          title: f.title,
+          description: f.description,
+          location: f.location,
+          ward: f.ward,
+          dept: f.dept,
+          aiDept: f.aiDept,
+          aiConfidence: f.aiConfidence,
+          photo: f.photo
+        })
+      });
 
-  const response = await apiRequest("/complaints", {
-    method: "POST",
-    body: JSON.stringify({
-      title: f.title,
-      description: f.description,
-      location: f.location,
-      ward: f.ward,
-      dept: f.dept,
-      aiDept: f.aiDept,
-      aiConfidence: f.aiConfidence,
-      photo: f.photo
-    })
-  });
+      const x = {
+        ...response.complaint,
+        citizenId,
+        forwards: [],
+        workerId: null,
+        remarks: "",
+        completionPhoto: null,
+        feedback: null
+      };
 
-  const x = {
-    ...response.complaint,
-    citizenId,
-    forwards: [],
-    workerId: null,
-    remarks: "",
-    completionPhoto: null,
-    feedback: null
-  };
-
-  db.complaints.unshift(x);
-
-  note(citizenId, `Complaint ${x.id} submitted.`);
-
-  commit();
-
-  return x;
-}
+      db.complaints.unshift(x);
+      note(citizenId, `Complaint ${x.id} submitted.`);
+      commit();
+      return x;
+    } catch (error) {
+      console.warn("Backend unavailable, storing complaint in local database:", error.message);
+      const sel =
+        f.dept || (f.aiDept && DEPTS.includes(f.aiDept) ? f.aiDept : null);
+      if (!sel || !DEPTS.includes(sel))
+        throw new Error("Could not determine department. Please select one manually.");
+      const priority = f.priority || (f.lifeSafety ? "P1" : "P3");
+      const slaHours = f.slaHours || (priority === "P1" ? 12 : priority === "P2" ? 36 : priority === "P3" ? 72 : 168);
+      const deadline = f.deadline || new Date(Date.now() + slaHours * 3600000).toISOString();
+      const x = {
+        id: "CT-" + Date.now().toString().slice(-6),
+        title: f.title,
+        description: f.description,
+        location: f.location,
+        ward: f.ward,
+        photo: f.photo,
+        citizenId,
+        status: "Submitted",
+        civilianDept: f.dept || null,
+        aiDept: f.aiDept || null,
+        aiConfidence: f.aiConfidence ?? null,
+        priority,
+        priorityScore: f.priorityScore || (priority === "P1" ? 95 : priority === "P2" ? 70 : priority === "P3" ? 45 : 20),
+        slaHours,
+        deadline,
+        lifeSafety: Boolean(f.lifeSafety),
+        hazardLevel: f.hazardLevel ?? 0.5,
+        hazardKeywords: f.hazardKeywords || [],
+        subType: f.subType || "civic_issue",
+        summary: f.summary || f.title,
+        finalDept: null,
+        currentDept: sel,
+        depts: [sel],
+        office: zoneOf(f.ward),
+        forwards: [],
+        workerId: null,
+        remarks: "",
+        completionPhoto: null,
+        feedback: null,
+        history: [
+          H(
+            "Submitted",
+            f.aiDept
+              ? `AI Triage: [${priority}] → ${f.aiDept} (SLA ${slaHours}h, ${Math.round((f.aiConfidence || 0) * 100)}% conf)${f.dept && f.dept !== f.aiDept ? `. Citizen override → ${f.dept}` : ""}`
+              : "Complaint received and sent to " + sel + ` [${priority}]`,
+          ),
+        ],
+      };
+      db.complaints.unshift(x);
+      note(citizenId, `Complaint ${x.id} submitted.`);
+      alertOfficers(x, `New complaint ${x.id} awaiting verification.`);
+      commit();
+      return x;
+    }
+  }
 /* export function addComplaint(f, citizenId) {
   // Department can come from AI classification or manual override
   const sel =

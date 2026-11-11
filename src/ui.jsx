@@ -8,6 +8,43 @@ const col={Submitted:'bg-slate-100 text-slate-700','Under Review':'bg-sky-100 te
 export const fmt=d=>new Date(d).toLocaleString()
 export const Badge=({s})=><span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${col[s]}`}>{s}</span>
 export const Prio=({p})=><span className={`text-xs font-medium ${p==='High'?'text-red-600':p==='Low'?'text-slate-500':'text-amber-600'}`}>{p} priority</span>
+export const PriorityBadge = ({ p, lifeSafety }) => {
+  const styles = {
+    P1: "bg-red-100 text-red-800 border-red-200",
+    P2: "bg-orange-100 text-orange-800 border-orange-200",
+    P3: "bg-blue-100 text-blue-800 border-blue-200",
+    P4: "bg-slate-100 text-slate-700 border-slate-200",
+  };
+  const labels = {
+    P1: "P1 Critical",
+    P2: "P2 High",
+    P3: "P3 Medium",
+    P4: "P4 Low",
+  };
+  const band = p || "P3";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${styles[band] || styles.P3}`}>
+      {lifeSafety && <span className="animate-pulse text-red-600 font-bold">⚠</span>}
+      {labels[band] || band}
+    </span>
+  );
+};
+export const SLABadge = ({ deadline, slaHours, status }) => {
+  if (status === "Resolved") {
+    return <span className="text-xs text-teal-600 font-medium">SLA: Met</span>;
+  }
+  if (!deadline) {
+    return slaHours ? <span className="text-xs text-slate-500 font-mono">SLA: {slaHours}h target</span> : null;
+  }
+  const diffMs = new Date(deadline).getTime() - Date.now();
+  const diffHours = Math.round(diffMs / 36e5);
+  const isBreached = diffMs < 0;
+  return (
+    <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${isBreached ? "bg-red-50 text-red-700 border-red-200 font-bold" : diffHours <= 6 ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}>
+      {isBreached ? `⚠ SLA Breached (${Math.abs(diffHours)}h ago)` : `⏱ SLA: ${diffHours}h left`}
+    </span>
+  );
+};
 export const Logo=()=><span className="flex items-center gap-2 font-bold text-blue-700"><span className="bg-gradient-to-br from-blue-600 to-teal-500 text-white p-1.5 rounded-lg"><Landmark size={18}/></span>CivicTrack</span>
 export const Card=({children,className=''})=><div className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-4 ${className}`}>{children}</div>
 export const Stat=({label,value})=><Card><p className="text-2xl font-bold text-blue-700">{value}</p><p className="text-xs text-slate-500">{label}</p></Card>
